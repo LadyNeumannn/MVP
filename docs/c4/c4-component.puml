@@ -1,0 +1,63 @@
+@startuml c4-component
+title C4 Level 3 — Component diagram: сервис Авито.Кухня
+
+skinparam rectangle {
+  RoundCorner 12
+}
+
+rectangle "Web-клиент" as Client
+rectangle "Сервис заведения" as RestSvc
+database "PostgreSQL" as DB
+
+package "Сервис Авито.Кухня" {
+
+  rectangle "HTTP Router\n<<component>>\nnet/http ServeMux,\nразделяет /api/v1/* и /partner/v1/*" as Router
+
+  rectangle "Auth Middleware\n<<component>>\nonboarding-секрет на регистрацию,\napi_key заведения — на всё остальное\nв /partner/v1/*" as Auth
+
+  rectangle "Client Handler\n<<component>>\nGET /restaurants?q=\nGET /restaurants/{id}/menu?q=\nPOST /orders\nGET /orders/{id}" as ClientHandler
+
+  rectangle "Partner Handler\n<<component>>\nPOST /restaurants\nCRUD /menu/items\nGET /orders, GET /stats\nPATCH /orders/{id}/status" as PartnerHandler
+
+  rectangle "Order Service\n<<component>>\nвалидация наличия позиций,\nсчёт суммы, переходы статусов" as OrderService
+
+  rectangle "Menu Service\n<<component>>\nCRUD меню, флаг available,\nподстроковый поиск" as MenuService
+
+  rectangle "Restaurant Service\n<<component>>\nрегистрация, api_key,\nстатус заведений" as RestaurantService
+
+  rectangle "Outbox Worker\n<<component>>\nпериодически вычитывает\nwebhook_outbox, доставляет\nс ретраями и backoff" as OutboxWorker
+
+  rectangle "Postgres Repository\n<<component>>\ndatabase/sql + lib/pq,\nреализует storage-интерфейсы" as Repo
+}
+
+Client --> Router
+RestSvc --> Router : Partner API\n(Authorization: Bearer <api_key>)
+Router --> Auth
+Auth --> ClientHandler
+Auth --> PartnerHandler
+
+ClientHandler --> OrderService
+ClientHandler --> MenuService
+ClientHandler --> RestaurantService
+
+PartnerHandler --> OrderService
+PartnerHandler --> MenuService
+PartnerHandler --> RestaurantService
+
+OrderService --> Repo
+MenuService --> Repo
+RestaurantService --> Repo
+
+note right of OrderService
+  При создании заказа записывает
+  событие в webhook_outbox В ТОЙ ЖЕ
+  транзакции, что и сам заказ —
+  не отправляет webhook напрямую.
+end note
+
+OutboxWorker --> Repo : FetchPendingWebhooks /\nMarkDelivered / MarkFailed
+OutboxWorker --> RestSvc : POST /webhooks/orders\n(с ретраями и backoff)
+
+Repo --> DB
+
+@enduml

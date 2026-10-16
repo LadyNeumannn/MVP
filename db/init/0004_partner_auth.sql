@@ -1,0 +1,1 @@
+ALTER TABLE restaurants ADD COLUMN api_key TEXT NOT NULL DEFAULT '';

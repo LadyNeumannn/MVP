@@ -1,0 +1,1 @@
+ALTER TABLE restaurants DROP COLUMN IF EXISTS api_key;

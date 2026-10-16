@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+  title: Авито.Кухня — Partner API
+  description: >
+    API для заведений (закрытый список интеграций в рамках MVP).
+    Используется backend-сервисом заведения: регистрация, меню, заказы.
+
+
+    Авторизация, два разных секрета с разным временем жизни:
+    регистрация нового заведения (`POST /restaurants`) защищена
+    bootstrap-секретом платформы (`onboardingSecret`, известен заранее
+    одобренным партнёрам); все остальные эндпоинты, персональным
+    `api_key` этого заведения, который выдаёт сама регистрация. Ключ
+    одного заведения не подходит для эндпоинтов другого.
+  version: 0.2.0
+servers:
+  - url: http://localhost:8080/partner/v1
+security:
+  - restaurantApiKey: []
+paths:
+  /restaurants:
+    post:
+      summary: Зарегистрировать заведение
+      operationId: registerRestaurant
+      security:
+        - onboardingSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRestaurantRequest'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterRestaurantResponse'
+        '200':
+          description: Уже существует (идемпотентно по id) api_key тот же, что был выдан при первой регистрации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterRestaurantResponse'
+
+  /restaurants/{restaurantId}/menu/items:
+    get:
+      summary: Список позиций меню заведения
+      operationId: listMenuItems
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuItem'
+    post:
+      summary: Добавить позицию меню
+      operationId: createMenuItem
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMenuItemRequest'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+
+  /restaurants/{restaurantId}/menu/items/{itemId}:
+    patch:
+      summary: Обновить цену/доступность позиции
+      operationId: updateMenuItem
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMenuItemRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+        '404':
+          description: Не найдено
+
+  /restaurants/{restaurantId}/orders:
+    get:
+      summary: Список заказов заведения
+      operationId: listRestaurantOrders
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [created, confirmed, preparing, ready, delivered, cancelled]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+
+  /restaurants/{restaurantId}/orders/{orderId}/status:
+    patch:
+      summary: Изменить статус заказа
+      operationId: updateOrderStatus
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [confirmed, preparing, ready, delivered, cancelled]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '409':
+          description: Недопустимый переход статуса
+
+  /restaurants/{restaurantId}/stats:
+    get:
+      summary: Статистика заведения (заказы, выручка)
+      operationId: getRestaurantStats
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantStats'
+        '404':
+          description: Заведение не найдено
+
+components:
+  securitySchemes:
+    onboardingSecret:
+      type: http
+      scheme: bearer
+      description: >
+        Bootstrap-секрет платформы (env PARTNER_ONBOARDING_SECRET у
+        kuhnya). Нужен только для POST /restaurants, регистрации нового
+        заведения. В демо-стенде общий для всех, в реальности выдавался
+        бы платформой конкретному партнёру заранее.
+    restaurantApiKey:
+      type: http
+      scheme: bearer
+      description: >
+        Персональный ключ заведения, выданный при регистрации (поле
+        api_key в ответе POST /restaurants). Нужен для всех эндпоинтов,
+        кроме самой регистрации. Ключ одного заведения не подходит для
+        эндпоинтов другого, а сервер проверяет соответствие restaurantId
+        в пути и владельца ключа.
+
+  parameters:
+    RestaurantId:
+      name: restaurantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    RegisterRestaurantRequest:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        webhook_url:
+          type: string
+          format: uri
+          description: Куда Авито.Кухня будет слать уведомления о новых заказах
+
+    Restaurant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        is_active: { type: boolean }
+        webhook_url: { type: string }
+
+    RegisterRestaurantResponse:
+      allOf:
+        - $ref: '#/components/schemas/Restaurant'
+        - type: object
+          required: [api_key]
+          properties:
+            api_key:
+              type: string
+              description: >
+                Показывается в ответе на регистрацию (и на повторную
+                идемпотентную регистрацию с тем же id), больше нигде,
+                ни один другой эндпоинт Restaurant не отдаёт этого поля.
+
+    CreateMenuItemRequest:
+      type: object
+      required: [name, price_cents]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            Опционально: свой id позиции меню. Если позиция с таким id уже
+            существует, она обновится, а не задублируется (идемпотентно,
+            полезно при пересинхронизации меню сервисом заведения).
+        name: { type: string }
+        description: { type: string }
+        price_cents: { type: integer, format: int64 }
+        available: { type: boolean, default: true }
+
+    UpdateMenuItemRequest:
+      type: object
+      properties:
+        price_cents: { type: integer, format: int64 }
+        available: { type: boolean }
+
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        restaurant_id: { type: string, format: uuid }
+        name: { type: string }
+        price_cents: { type: integer, format: int64 }
+        available: { type: boolean }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [created, confirmed, preparing, ready, delivered, cancelled]
+        total_cents: { type: integer, format: int64 }
+        customer_name: { type: string }
+        customer_phone: { type: string }
+        delivery_address: { type: string }
+
+    RestaurantStats:
+      type: object
+      properties:
+        restaurant_id: { type: string, format: uuid }
+        total_orders: { type: integer }
+        orders_by_status:
+          type: object
+          additionalProperties: { type: integer }
+          description: количество заказов по каждому статусу
+        revenue_cents:
+          type: integer
+          format: int64
+          description: сумма total_cents по заказам в статусе delivered
+        avg_order_value_cents:
+          type: integer
+          format: int64
+          description: revenue_cents / количество delivered-заказов (0, если их нет)

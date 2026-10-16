@@ -1,0 +1,204 @@
+openapi: 3.0.3
+info:
+  title: Авито.Кухня — Client API
+  description: >
+    Публичный API для клиентской части. Без авторизации/аутентификации —
+    по условиям MVP они не реализуются.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /restaurants:
+    get:
+      summary: Список активных заведений
+      operationId: listRestaurants
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Подстроковый регистронезависимый поиск по названию заведения
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Restaurant'
+
+  /restaurants/{restaurantId}/menu:
+    get:
+      summary: Меню заведения
+      operationId: getRestaurantMenu
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+        - name: q
+          in: query
+          required: false
+          description: Подстроковый регистронезависимый поиск по названию позиции меню
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders:
+    post:
+      summary: Оформить заказ
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Заказ создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Заведение не найдено
+        '409':
+          description: >
+            Часть позиций недоступна, принадлежит другому заведению,
+            либо заведение неактивно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Некорректное тело запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{orderId}:
+    get:
+      summary: Статус и состав заказа
+      operationId: getOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    RestaurantId:
+      name: restaurantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    Restaurant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        is_active: { type: boolean }
+
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        restaurant_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        price_cents: { type: integer, format: int64 }
+        available: { type: boolean }
+
+    CreateOrderRequest:
+      type: object
+      required: [restaurant_id, customer_name, customer_phone, delivery_address, items]
+      properties:
+        restaurant_id: { type: string, format: uuid }
+        customer_name: { type: string, minLength: 1 }
+        customer_phone:
+          type: string
+          minLength: 1
+          description: Контактный телефон для курьера
+        delivery_address:
+          type: string
+          minLength: 1
+          description: Куда доставить заказ (свободный текст в MVP, без геокодирования)
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [menu_item_id, quantity]
+            properties:
+              menu_item_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        restaurant_id: { type: string, format: uuid }
+        customer_name: { type: string }
+        customer_phone: { type: string }
+        delivery_address: { type: string }
+        status:
+          type: string
+          enum: [created, confirmed, preparing, ready, delivered, cancelled]
+        total_cents: { type: integer, format: int64 }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    OrderItem:
+      type: object
+      properties:
+        menu_item_id: { type: string, format: uuid }
+        name_snapshot: { type: string }
+        price_cents_snapshot: { type: integer, format: int64 }
+        quantity: { type: integer }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+        details:
+          type: array
+          items: { type: string }

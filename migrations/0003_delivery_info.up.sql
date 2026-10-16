@@ -1,0 +1,2 @@
+ALTER TABLE orders ADD COLUMN delivery_address TEXT NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN customer_phone TEXT NOT NULL DEFAULT '';

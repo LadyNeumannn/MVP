@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test & vet (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [kuhnya, restaurant-example]
+    # Нужен только сервису kuhnya (интеграционные тесты Postgres-слоя),
+    # но объявлен на весь job — matrix не даёт подключить service
+    # выборочно по значению, а лишний неиспользуемый контейнер для
+    # restaurant-example не мешает и почти ничего не стоит по времени.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kuhnya
+          POSTGRES_PASSWORD: kuhnya
+          POSTGRES_DB: kuhnya_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.22'
+          cache: false
+      - run: go mod tidy
+      - run: go vet ./...
+      - run: go test ./... -v
+      - name: Apply migrations to test DB
+        if: matrix.service == 'kuhnya'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          for f in ../../migrations/*.up.sql; do
+            echo "applying $f"
+            PGPASSWORD=kuhnya psql -h localhost -U kuhnya -d kuhnya_test -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Postgres integration tests
+        if: matrix.service == 'kuhnya'
+        env:
+          TEST_DATABASE_URL: "postgres://kuhnya:kuhnya@localhost:5432/kuhnya_test?sslmode=disable"
+        run: go test -tags=integration ./... -v -run Postgres
+
+  lint:
+    name: Lint (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [kuhnya, restaurant-example]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.22'
+          cache: false
+      # golangci-lint-action v8 is required for golangci-lint v2 — v6/v7
+      # либо не понимают v2, либо жёстко его отвергают. .golangci.yml в
+      # этом репозитории написан под v2-схему (version: "2", отдельная
+      # секция formatters) — если когда-нибудь понадобится откатиться на
+      # v1 golangci-lint, конфиг тоже придётся мигрировать обратно
+      # (`golangci-lint migrate` умеет только v1 -> v2, не наоборот).
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: services/${{ matrix.service }}
+          version: v2.12.2
+
+  build-and-push:
+    name: Build & push image (${{ matrix.service }})
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    # Публикуем образы только из main — в PR достаточно убедиться, что
+    # сборка не падает (это покрыто job'ом test через go build не здесь,
+    # но docker build ниже фактически тоже его перепроверяет).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [kuhnya, restaurant-example]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}

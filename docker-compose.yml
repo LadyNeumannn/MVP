@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kuhnya
+      POSTGRES_PASSWORD: kuhnya
+      POSTGRES_DB: kuhnya
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuhnya -d kuhnya"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kuhnya:
+    build: ./services/kuhnya
+    environment:
+      PORT: "8080"
+      DB_DSN: "postgres://kuhnya:kuhnya@postgres:5432/kuhnya?sslmode=disable"
+      DB_MAX_OPEN_CONNS: "20"
+      DB_MAX_IDLE_CONNS: "10"
+      PARTNER_ONBOARDING_SECRET: "dev-onboarding-secret-change-me"
+      WEBHOOK_SHARED_SECRET: "webhook-secret-change-me"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  restaurant-example:
+    build: ./services/restaurant-example
+    environment:
+      PORT: "8090"
+      KUHNYA_BASE_URL: "http://kuhnya:8080"
+      OWN_BASE_URL: "http://restaurant-example:8090"
+      RESTAURANT_ID: "6f2f8c1a-0000-4b1a-9c3a-000000000000"
+      RESTAURANT_NAME: "Пельменная у Ашота"
+      ONBOARDING_SECRET: "dev-onboarding-secret-change-me"
+      WEBHOOK_SHARED_SECRET: "webhook-secret-change-me"
+    ports:
+      - "8090:8090"
+    depends_on:
+      kuhnya:
+        condition: service_healthy
+
+volumes:
+  pgdata:

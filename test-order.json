@@ -1,0 +1,12 @@
+﻿{
+    "restaurant_id":  "6f2f8c1a-0000-4b1a-9c3a-000000000000",
+    "customer_phone":  "+79990000000",
+    "customer_name":  "Ариана",
+    "items":  [
+                  {
+                      "quantity":  2,
+                      "menu_item_id":  "6f2f8c1a-0001-4b1a-9c3a-000000000001"
+                  }
+              ],
+    "delivery_address":  "г. Нижний Новгород, ул. Тестовая, 1"
+}

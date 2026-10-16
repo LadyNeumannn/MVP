@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Авито.Кухня — демо-клиент (не часть задания)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Авито.Кухня — демо-клиент</h1>
+    <p class="disclaimer">
+      Просто ручной инструмент для проверки
+      сценариев Client API. По условиям задания клиентская часть не
+      оценивается и не требуется, поэтому выглядит немного грустно.
+    </p>
+  </header>
+
+  <main>
+    <section id="restaurants-panel" class="panel">
+      <h2>1. Заведение</h2>
+      <input id="restaurant-search" type="text" placeholder="Поиск по названию..." />
+      <select id="restaurant-select">
+        <option value="">— выберите заведение —</option>
+      </select>
+      <button id="refresh-restaurants">Обновить список</button>
+    </section>
+
+    <section id="menu-panel" class="panel">
+      <h2>2. Меню</h2>
+      <input id="menu-search" type="text" placeholder="Поиск по названию блюда..." disabled />
+      <ul id="menu-list"><li class="empty">Выберите заведение</li></ul>
+    </section>
+
+    <section id="cart-panel" class="panel">
+      <h2>3. Корзина</h2>
+      <ul id="cart-list"><li class="empty">Корзина пуста</li></ul>
+      <p>Итого: <strong id="cart-total">0.00 ₽</strong></p>
+
+      <label for="customer-name">Имя покупателя</label>
+      <input id="customer-name" type="text" placeholder="Например, Ариана" />
+
+      <label for="customer-phone">Телефон</label>
+      <input id="customer-phone" type="text" placeholder="+7 999 000-00-00" />
+
+      <label for="delivery-address">Адрес доставки</label>
+      <input id="delivery-address" type="text" placeholder="Улица, дом, квартира" />
+
+      <button id="place-order" disabled>Оформить заказ</button>
+      <p id="order-error" class="error"></p>
+    </section>
+
+    <section id="order-panel" class="panel">
+      <h2>4. Статус заказа</h2>
+      <div id="order-status"><p class="empty">Заказов пока нет</p></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

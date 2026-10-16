@@ -1,0 +1,41 @@
+@startuml c4-container
+title C4 Level 2 — Container diagram: Авито.Кухня (в контексте Авито)
+
+skinparam rectangle {
+  RoundCorner 15
+}
+skinparam actorStyle awesome
+
+left to right direction
+
+actor "Пользователь\n(покупатель еды)" as User
+actor "Владелец заведения /\nего система" as Owner
+
+rectangle "Авито (платформа)" {
+  rectangle "Web-клиент\nАвито.Кухня\n<<container: SPA, вне скоупа MVP>>" as WebClient
+
+  rectangle "Сервис Авито.Кухня\n<<container: Go / net-http>>\nAPI для клиента и для заведений" as KuhnyaSvc
+
+  database "PostgreSQL\n<<container: БД>>\nзаказы, меню, заведения" as DB
+}
+
+rectangle "Заведение (пример)\n<<container: Go, отдельный сервис>>\nимитирует backend реального ресторана" as RestSvc
+
+User --> WebClient : действия в браузере
+WebClient --> KuhnyaSvc : HTTPS / JSON\nClient API (/api/v1/*)
+
+Owner --> RestSvc : управляет меню,\nобрабатывает заказы
+
+RestSvc --> KuhnyaSvc : HTTPS / JSON\nPartner API (/partner/v1/*)\nрегистрация (onboarding-секрет),\nдальше — свой api_key заведения
+KuhnyaSvc --> RestSvc : HTTPS / JSON\nWebhook: новый заказ\n(POST {webhook_url}/webhooks/orders)
+
+KuhnyaSvc --> DB : SQL (database/sql + lib/pq)
+
+note right of RestSvc
+  В проде вместо одного примера здесь
+  подключаются backend-системы разных
+  заведений — все говорят с Авито.Кухня
+  по одному и тому же Partner API.
+end note
+
+@enduml

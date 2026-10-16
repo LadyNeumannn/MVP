@@ -1,0 +1,58 @@
+@startuml restaurant-journey
+title CJM: заведение обрабатывает заказы в Авито.Кухня
+
+start
+
+:Сервис заведения стартует;
+:POST /partner/v1/restaurants\nрегистрирует заведение\n(id, name, webhook_url);
+
+if (Заведение уже зарегистрировано?) then (да)
+  :Пропустить регистрацию;
+else (нет)
+  :Создана запись заведения,\nis_active = true;
+endif
+
+:POST /partner/v1/restaurants/{id}/menu/items\nзагружает начальное меню;
+
+:Ожидает новые заказы;
+
+fork
+  :Владелец меняет цену/доступность позиции;
+  :PATCH /partner/v1/restaurants/{id}/menu/items/{itemId};
+  :Изменение сразу видно клиентам\nв GET .../menu;
+fork again
+  :Пользователь оформил заказ\nна это заведение;
+  :Авито.Кухня шлёт webhook\nPOST {webhook_url}/webhooks/orders;
+
+  if (Заведение доступно\n(webhook доставлен)?) then (нет)
+    :Заказ остаётся в статусе "created";
+    :Заведение увидит его позже\nчерез GET .../orders?status=created;
+  else (да)
+  endif
+
+  :Заведение решает, принять ли заказ;
+  if (Может выполнить заказ?) then (нет)
+    :PATCH .../orders/{id}/status\nstatus = cancelled;
+    note right
+      В примере restaurant-example это решение
+      имитируется случайно (~15% заказов) —
+      чтобы ветка cancelled реально
+      отрабатывала на живом стенде, а не только
+      на бумаге.
+    end note
+    stop
+  else (да)
+  endif
+
+  :PATCH .../orders/{id}/status\nstatus = confirmed;
+  :Готовит заказ;
+  :PATCH .../orders/{id}/status\nstatus = preparing;
+  :Заказ готов;
+  :PATCH .../orders/{id}/status\nstatus = ready;
+  :Заказ передан/доставлен;
+  :PATCH .../orders/{id}/status\nstatus = delivered;
+end fork
+
+stop
+
+@enduml

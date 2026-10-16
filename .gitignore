@@ -1,0 +1,12 @@
+# Go
+*.exe
+*.test
+*.out
+vendor/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
